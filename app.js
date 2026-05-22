@@ -4,24 +4,59 @@ const ctx = canvas.getContext('2d');
 const staticImg = document.getElementById('static-img');
 const statusText = document.getElementById('status');
 
-// Nút điều khiển
-const btnCam = document.getElementById('btn-cam');
-const btnUpload = document.getElementById('upload-file');
-const btnUrl = document.getElementById('btn-url');
-const inputUrl = document.getElementById('input-url');
-
 const CLASSES = ["Hazardous waste", "Organic waste", "Inorganic waste", "Recyclable waste"];
 
 let session; 
 let isDetecting = false; 
-let currentMode = 'video'; // Biến kiểm soát chế độ: 'video' hoặc 'image'
+let currentMode = 'video'; 
 
 const offCanvas = document.createElement('canvas');
 offCanvas.width = 640;
 offCanvas.height = 640;
 const offCtx = offCanvas.getContext('2d', { willReadFrequently: true }); 
 
-// --- 1. KHỞI ĐỘNG CAMERA ---
+// --- 1. CHUYỂN TAB LOGIC ---
+const tabBtns = document.querySelectorAll('.tab-btn');
+const tabContents = document.querySelectorAll('.tab-content');
+
+tabBtns.forEach(btn => {
+    btn.addEventListener('click', async () => {
+        // Cập nhật UI của Tab
+        tabBtns.forEach(b => b.classList.remove('active'));
+        tabContents.forEach(c => c.classList.remove('active'));
+        
+        btn.classList.add('active');
+        document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+
+        // Xử lý hệ thống ngầm
+        const targetMode = btn.dataset.tab;
+        
+        if (targetMode === 'cam') {
+            if (currentMode === 'video') return; 
+            currentMode = 'video';
+            staticImg.style.display = 'none';
+            video.style.display = 'block';
+            ctx.clearRect(0, 0, canvas.width, canvas.height); 
+            statusText.innerHTML = "✅ Đang quét Live Camera...";
+            statusText.style.background = "#4CAF50";
+            await video.play();
+            detectFrame();
+        } else {
+            // Chế độ Ảnh (Upload / URL) -> Tắt Camera ngầm
+            currentMode = 'image';
+            video.pause();
+            video.style.display = 'none';
+            staticImg.style.display = 'block';
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            statusText.innerHTML = "Đang chờ ảnh đầu vào...";
+            statusText.style.background = "#ffb300";
+            // Xóa ảnh cũ đi cho sạch
+            staticImg.removeAttribute('src'); 
+        }
+    });
+});
+
+// --- 2. KHỞI ĐỘNG CAMERA ---
 async function setupCamera() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -37,7 +72,7 @@ async function setupCamera() {
     }
 }
 
-// --- 2. NẠP MODEL ONNX ---
+// --- 3. NẠP MODEL ONNX ---
 async function loadModel() {
     try {
         statusText.innerHTML = "⏳ Đang nạp Model (Ưu tiên GPU)...";
@@ -48,7 +83,7 @@ async function loadModel() {
             executionProviders: ['webgl', 'wasm'] 
         });
 
-        statusText.innerHTML = "✅ Hệ thống sẵn sàng!";
+        statusText.innerHTML = "✅ Model đã lên đạn! Sẵn sàng quét rác.";
         statusText.style.background = "#4CAF50";
     } catch (error) {
         statusText.innerHTML = "❌ Lỗi nạp file ONNX.";
@@ -57,11 +92,10 @@ async function loadModel() {
     }
 }
 
-// --- 3. TIỀN XỬ LÝ (Chạy được cho cả Video lẫn Ảnh) ---
+// --- 4. TIỀN XỬ LÝ (Chung cho Video/Ảnh) ---
 function preprocess(sourceElement) {
     offCtx.drawImage(sourceElement, 0, 0, 640, 640);
     const imgData = offCtx.getImageData(0, 0, 640, 640).data;
-
     const float32Data = new Float32Array(3 * 640 * 640);
     for (let i = 0; i < 640 * 640; i++) {
         float32Data[i]                 = imgData[i * 4] / 255.0;     
@@ -82,7 +116,7 @@ function iou(box1, box2) {
     return intersection / (area1 + area2 - intersection);
 }
 
-// --- 4. HÀM LÕI: SUY LUẬN & VẼ BBOX ---
+// --- 5. HÀM LÕI: SUY LUẬN & VẼ BBOX ---
 async function runInferenceAndDraw(sourceElement) {
     const inputTensor = preprocess(sourceElement);
     const feeds = { [session.inputNames[0]]: inputTensor };
@@ -150,9 +184,8 @@ async function runInferenceAndDraw(sourceElement) {
     });
 }
 
-// --- 5. VÒNG LẶP CHO LIVE CAM ---
+// --- 6. VÒNG LẶP LIVE CAM ---
 async function detectFrame() {
-    // Tự động dừng vòng lặp nếu người dùng chuyển sang quét Ảnh
     if (!session || isDetecting || currentMode !== 'video') {
         if (currentMode === 'video') requestAnimationFrame(detectFrame);
         return;
@@ -169,67 +202,42 @@ async function detectFrame() {
     if (currentMode === 'video') requestAnimationFrame(detectFrame); 
 }
 
-// --- 6. XỬ LÝ ẢNH TĨNH (UPLOAD / LINK) ---
+// --- 7. XỬ LÝ ẢNH TĨNH ---
 async function processImage(imgSource) {
-    if (!session) return alert("Model chưa sẵn sàng, vui lòng đợi thêm chút!");
-    
-    currentMode = 'image'; // Tắt Cam ngầm
-    video.pause();
-    video.style.display = 'none';
-    staticImg.style.display = 'block';
+    if (!session) return alert("Model chưa sẵn sàng, chờ xíu!");
     
     statusText.innerHTML = "⏳ Đang phân tích ảnh...";
     statusText.style.background = "orange";
-    ctx.clearRect(0, 0, canvas.width, canvas.height); // Xóa BBox cũ
+    ctx.clearRect(0, 0, canvas.width, canvas.height); 
 
     staticImg.src = imgSource;
-    
-    // Đợi ảnh load xong mới phân tích
     staticImg.onload = async () => {
         try {
             await runInferenceAndDraw(staticImg);
-            statusText.innerHTML = "✅ Phân tích ảnh hoàn tất!";
+            statusText.innerHTML = "✅ Phân tích xong!";
             statusText.style.background = "#4CAF50";
         } catch(e) {
             console.error(e);
         }
     };
-
     staticImg.onerror = () => {
-        alert("Lỗi tải ảnh! Nếu xài Link, trang web chứa ảnh đó đang bật chế độ chống copy (CORS). Hãy tải ảnh về máy rồi dùng nút 'Tải ảnh lên'.");
-        statusText.innerHTML = "❌ Không thể tải ảnh!";
+        alert("Lỗi tải ảnh! Hãy tải ảnh về máy rồi dùng nút 'Tải Ảnh' nhé.");
+        statusText.innerHTML = "❌ Lỗi ảnh!";
         statusText.style.background = "red";
     }
 }
 
-// --- CÁC SỰ KIỆN LẮNG NGHE NÚT BẤM ---
-// 1. Dùng Camera
-btnCam.addEventListener('click', async () => {
-    if (currentMode === 'video') return; 
-    currentMode = 'video';
-    staticImg.style.display = 'none';
-    video.style.display = 'block';
-    ctx.clearRect(0, 0, canvas.width, canvas.height); 
-    
-    statusText.innerHTML = "✅ Đang quét Live Camera...";
-    statusText.style.background = "#4CAF50";
-    
-    await video.play();
-    detectFrame();
-});
-
-// 2. Upload Ảnh từ máy tính/điện thoại
-btnUpload.addEventListener('change', (e) => {
+// --- Lắng nghe sự kiện Upload / URL ---
+document.getElementById('upload-file').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const imgUrl = URL.createObjectURL(file); // Chuyển file thành link tạm
+    const imgUrl = URL.createObjectURL(file);
     processImage(imgUrl);
 });
 
-// 3. Quét ảnh từ Link
-btnUrl.addEventListener('click', () => {
-    const url = inputUrl.value.trim();
-    if (!url) return alert("Fen chưa dán link ảnh vào kìa!");
+document.getElementById('btn-url').addEventListener('click', () => {
+    const url = document.getElementById('input-url').value.trim();
+    if (!url) return alert("Fen dán link ảnh vào trước đã!");
     processImage(url);
 });
 
@@ -238,7 +246,7 @@ async function main() {
     await setupCamera();
     video.play();
     await loadModel();
-    detectFrame(); // Mặc định vào web là bật Cam luôn
+    detectFrame(); 
 }
 
 main();
