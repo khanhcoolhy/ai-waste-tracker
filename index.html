@@ -4,8 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Waste Tracker 🌍</title>
+    
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+    
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -29,7 +33,7 @@
             box-shadow: 0 4px 10px rgba(0,0,0,0.15); transition: all 0.3s ease;
         }
 
-        /* --- CSS CHO TAB --- */
+        /* --- BẢNG ĐIỀU KHIỂN DẠNG TAB --- */
         .controls-wrapper {
             background: rgba(255, 255, 255, 0.85);
             padding: 15px;
@@ -42,40 +46,25 @@
         }
 
         .tabs {
-            display: flex;
-            gap: 5px;
-            background: #e0e0e0;
-            padding: 5px;
-            border-radius: 15px;
-            margin-bottom: 15px;
+            display: flex; gap: 5px; background: #e0e0e0;
+            padding: 5px; border-radius: 15px; margin-bottom: 15px;
         }
 
         .tab-btn {
-            flex: 1;
-            padding: 10px 5px;
-            border: none;
-            background: transparent;
-            color: #555;
-            font-weight: bold;
-            font-size: 0.95rem;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: all 0.3s ease;
+            flex: 1; padding: 10px 5px; border: none; background: transparent;
+            color: #555; font-weight: bold; font-size: 0.95rem;
+            border-radius: 10px; cursor: pointer; transition: all 0.3s ease;
         }
 
         .tab-btn.active {
-            background: #4CAF50;
-            color: white;
+            background: #4CAF50; color: white;
             box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
         }
 
-        /* Vùng nội dung của từng Tab */
         .tab-content { display: none; text-align: center; }
         .tab-content.active { display: block; animation: fadeIn 0.3s ease; }
-
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Nút và Input bên trong Tab */
         .btn {
             padding: 10px 20px; border: none; border-radius: 12px;
             font-weight: bold; font-size: 1rem; cursor: pointer; color: white;
@@ -92,12 +81,13 @@
         }
         .input-url:focus { border-color: #4CAF50; }
 
-        /* Khung Camera/Ảnh */
+        /* --- KHUNG CAMERA/ẢNH --- */
         .camera-wrapper {
             position: relative; width: 100%; max-width: 500px; aspect-ratio: 1 / 1;
             background-color: #000; border-radius: 24px; overflow: hidden;
             box-shadow: 0 15px 35px rgba(46, 125, 50, 0.4); border: 6px solid #ffffff;
         }
+        /* Phải dùng object-fit: fill để tọa độ BBox khớp tuyệt đối */
         video, canvas, img {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; 
         }
@@ -122,13 +112,13 @@
         </div>
 
         <div class="tab-content active" id="tab-cam">
-            <p style="color: #388e3c; font-weight: bold;">Hệ thống đang tự động phân tích rác qua Camera...</p>
+            <p style="color: #388e3c; font-weight: bold;" id="cam-instruction">Hệ thống đang tự động phân tích qua Camera...</p>
         </div>
 
         <div class="tab-content" id="tab-upload">
             <input type="file" id="upload-file" accept="image/*" style="display: none;">
             <button class="btn btn-upload" onclick="document.getElementById('upload-file').click()">
-                Chọn ảnh từ thiết bị
+                Chọn ảnh từ thiết bị của bạn
             </button>
         </div>
 
@@ -141,7 +131,7 @@
     </div>
     
     <div class="camera-wrapper">
-        <video id="video" width="640" height="640" autoplay playsinline></video>
+        <video id="video" width="640" height="640" autoplay playsinline muted></video>
         <img id="static-img" crossorigin="anonymous" style="display: none;">
         <canvas id="canvas" width="640" height="640"></canvas>
     </div>

@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 4
+names: ['Inorganic waste', 'Organic waste', 'Recyclable waste', 'hazardous waste']
+
+roboflow:
+  workspace: classification-lfv4e
+  project: waster-mtgt6
+  version: 7
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/classification-lfv4e/waster-mtgt6/dataset/7

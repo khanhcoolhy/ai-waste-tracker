@@ -3,9 +3,10 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const staticImg = document.getElementById('static-img');
 const statusText = document.getElementById('status');
+const camInstruction = document.getElementById('cam-instruction');
 
-const CLASSES = ["Hazardous waste", "Organic waste", "Inorganic waste", "Recyclable waste"];
-
+// Biến rỗng, sẽ tự động được điền từ file data.yaml
+let CLASSES = []; 
 let session; 
 let isDetecting = false; 
 let currentMode = 'video'; 
@@ -21,14 +22,12 @@ const tabContents = document.querySelectorAll('.tab-content');
 
 tabBtns.forEach(btn => {
     btn.addEventListener('click', async () => {
-        // Cập nhật UI của Tab
         tabBtns.forEach(b => b.classList.remove('active'));
         tabContents.forEach(c => c.classList.remove('active'));
         
         btn.classList.add('active');
         document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
 
-        // Xử lý hệ thống ngầm
         const targetMode = btn.dataset.tab;
         
         if (targetMode === 'cam') {
@@ -39,24 +38,62 @@ tabBtns.forEach(btn => {
             ctx.clearRect(0, 0, canvas.width, canvas.height); 
             statusText.innerHTML = "✅ Đang quét Live Camera...";
             statusText.style.background = "#4CAF50";
-            await video.play();
+            if(video.srcObject) await video.play();
             detectFrame();
         } else {
-            // Chế độ Ảnh (Upload / URL) -> Tắt Camera ngầm
             currentMode = 'image';
             video.pause();
             video.style.display = 'none';
             staticImg.style.display = 'block';
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            statusText.innerHTML = "Đang chờ ảnh đầu vào...";
+            statusText.innerHTML = "Đang chờ tải ảnh đầu vào...";
             statusText.style.background = "#ffb300";
-            // Xóa ảnh cũ đi cho sạch
             staticImg.removeAttribute('src'); 
         }
     });
 });
 
-// --- 2. KHỞI ĐỘNG CAMERA ---
+// --- 2. TỰ ĐỘNG ĐỌC YAML VÀ NẠP MODEL ---
+async function loadModel() {
+    try {
+        statusText.innerHTML = "⏳ Đang đọc cấu hình data.yaml...";
+        statusText.style.background = "orange";
+
+        // Tải file data.yaml
+        const yamlResponse = await fetch('./data.yaml');
+        if (!yamlResponse.ok) throw new Error("Không tìm thấy file data.yaml ở cùng thư mục");
+        
+        const yamlText = await yamlResponse.text();
+        const config = jsyaml.load(yamlText);
+
+        // Lấy danh sách nhãn
+        if (config.names) {
+            CLASSES = Array.isArray(config.names) ? config.names : Object.values(config.names);
+            console.log("✅ Đã load danh sách nhãn từ YAML:", CLASSES);
+            camInstruction.innerHTML = `Hỗ trợ ${CLASSES.length} nhãn: <br> ${CLASSES.join(' • ')}`;
+        } else {
+            throw new Error("File data.yaml không có mục 'names'");
+        }
+
+        statusText.innerHTML = "⏳ Đang tải Model AI (khoảng 18MB)...";
+
+        // Nạp Model ONNX (Dùng WASM để máy tính/điện thoại nào cũng chạy êm ru, không bị đơ)
+        ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
+        session = await ort.InferenceSession.create('./best_yolo11_best-param-tune.onnx', { 
+            executionProviders: ['wasm'],
+            graphOptimizationLevel: 'all'
+        });
+
+        statusText.innerHTML = "✅ Hệ thống sẵn sàng!";
+        statusText.style.background = "#4CAF50";
+    } catch (error) {
+        statusText.innerHTML = "❌ Lỗi khởi tạo hệ thống (Xem F12)";
+        statusText.style.background = "red";
+        console.error("Lỗi:", error);
+    }
+}
+
+// --- 3. KHỞI ĐỘNG CAMERA ---
 async function setupCamera() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -67,32 +104,12 @@ async function setupCamera() {
             video.onloadedmetadata = () => resolve(video);
         });
     } catch (error) {
-        statusText.innerHTML = "❌ Lỗi mở Camera!";
+        statusText.innerHTML = "❌ Lỗi mở Camera. Vui lòng cấp quyền!";
         statusText.style.background = "red";
     }
 }
 
-// --- 3. NẠP MODEL ONNX ---
-async function loadModel() {
-    try {
-        statusText.innerHTML = "⏳ Đang nạp Model (Ưu tiên GPU)...";
-        statusText.style.background = "orange";
-        ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
-
-        session = await ort.InferenceSession.create('./best_yolo11_best-param-tune.onnx', { 
-            executionProviders: ['webgl', 'wasm'] 
-        });
-
-        statusText.innerHTML = "✅ Model đã lên đạn! Sẵn sàng quét rác.";
-        statusText.style.background = "#4CAF50";
-    } catch (error) {
-        statusText.innerHTML = "❌ Lỗi nạp file ONNX.";
-        statusText.style.background = "red";
-        console.error(error);
-    }
-}
-
-// --- 4. TIỀN XỬ LÝ (Chung cho Video/Ảnh) ---
+// --- 4. TIỀN XỬ LÝ ẢNH CHUNG ---
 function preprocess(sourceElement) {
     offCtx.drawImage(sourceElement, 0, 0, 640, 640);
     const imgData = offCtx.getImageData(0, 0, 640, 640).data;
@@ -116,7 +133,7 @@ function iou(box1, box2) {
     return intersection / (area1 + area2 - intersection);
 }
 
-// --- 5. HÀM LÕI: SUY LUẬN & VẼ BBOX ---
+// --- 5. HÀM LÕI SUY LUẬN AI ---
 async function runInferenceAndDraw(sourceElement) {
     const inputTensor = preprocess(sourceElement);
     const feeds = { [session.inputNames[0]]: inputTensor };
@@ -162,29 +179,33 @@ async function runInferenceAndDraw(sourceElement) {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height); 
     
+    // Bảng màu tự động xoay vòng cho mọi số lượng nhãn
+    const PALETTE = [
+        "#FF3838", "#FF9D97", "#FF701F", "#FFB21D", "#CFD231", 
+        "#48F90A", "#92CC17", "#3DDB86", "#1A9334", "#00D4BB"
+    ];
+
     nmsBoxes.forEach(box => {
         const scaleX = canvas.width / 640;
         const scaleY = canvas.height / 640;
 
-        let boxColor = "#00FF00"; 
-        if(box.classId === 0) boxColor = "#FF0000"; 
-        if(box.classId === 1) boxColor = "#FFA500"; 
-        if(box.classId === 2) boxColor = "#808080"; 
-        if(box.classId === 3) boxColor = "#0000FF"; 
+        let boxColor = PALETTE[box.classId % PALETTE.length];
 
         ctx.strokeStyle = boxColor; 
         ctx.lineWidth = 3;
         ctx.strokeRect(box.x1 * scaleX, box.y1 * scaleY, (box.x2 - box.x1) * scaleX, (box.y2 - box.y1) * scaleY);
 
         ctx.fillStyle = boxColor;
-        ctx.fillRect(box.x1 * scaleX, box.y1 * scaleY - 25, 200, 25);
+        // Chiều rộng nhãn tự co giãn theo độ dài của tên rác
+        const labelText = `${CLASSES[box.classId]} (${(box.prob * 100).toFixed(0)}%)`;
+        ctx.fillRect(box.x1 * scaleX, box.y1 * scaleY - 25, ctx.measureText(labelText).width * 2.5 + 20, 25);
         ctx.fillStyle = "white";
         ctx.font = "bold 16px Arial";
-        ctx.fillText(`${CLASSES[box.classId]} (${(box.prob * 100).toFixed(0)}%)`, box.x1 * scaleX + 5, box.y1 * scaleY - 5);
+        ctx.fillText(labelText, box.x1 * scaleX + 5, box.y1 * scaleY - 5);
     });
 }
 
-// --- 6. VÒNG LẶP LIVE CAM ---
+// --- 6. VÒNG LẶP CHO CAMERA ---
 async function detectFrame() {
     if (!session || isDetecting || currentMode !== 'video') {
         if (currentMode === 'video') requestAnimationFrame(detectFrame);
@@ -195,7 +216,7 @@ async function detectFrame() {
     try {
         await runInferenceAndDraw(video);
     } catch (e) {
-        console.error(e);
+        console.error("Lỗi vẽ hình ngầm:", e);
     }
     isDetecting = false; 
     
@@ -204,7 +225,7 @@ async function detectFrame() {
 
 // --- 7. XỬ LÝ ẢNH TĨNH ---
 async function processImage(imgSource) {
-    if (!session) return alert("Model chưa sẵn sàng, chờ xíu!");
+    if (!session) return alert("Model AI chưa nạp xong, vui lòng chờ vài giây!");
     
     statusText.innerHTML = "⏳ Đang phân tích ảnh...";
     statusText.style.background = "orange";
@@ -214,20 +235,20 @@ async function processImage(imgSource) {
     staticImg.onload = async () => {
         try {
             await runInferenceAndDraw(staticImg);
-            statusText.innerHTML = "✅ Phân tích xong!";
+            statusText.innerHTML = "✅ Phân tích ảnh hoàn tất!";
             statusText.style.background = "#4CAF50";
         } catch(e) {
             console.error(e);
         }
     };
     staticImg.onerror = () => {
-        alert("Lỗi tải ảnh! Hãy tải ảnh về máy rồi dùng nút 'Tải Ảnh' nhé.");
-        statusText.innerHTML = "❌ Lỗi ảnh!";
+        alert("Không thể tải ảnh. Nếu dùng Link, trang gốc có thể đang chặn quyền truy cập (CORS). Hãy tải ảnh về rồi dùng tab Tải Ảnh nhé.");
+        statusText.innerHTML = "❌ Lỗi đọc file ảnh!";
         statusText.style.background = "red";
     }
 }
 
-// --- Lắng nghe sự kiện Upload / URL ---
+// Lắng nghe sự kiện Upload / URL
 document.getElementById('upload-file').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -237,16 +258,23 @@ document.getElementById('upload-file').addEventListener('change', (e) => {
 
 document.getElementById('btn-url').addEventListener('click', () => {
     const url = document.getElementById('input-url').value.trim();
-    if (!url) return alert("Fen dán link ảnh vào trước đã!");
+    if (!url) return alert("Fen chưa dán link kìa!");
     processImage(url);
 });
 
-// --- KHỞI CHẠY ---
+// --- 8. KHỞI ĐỘNG HỆ THỐNG AN TOÀN ---
 async function main() {
-    await setupCamera();
-    video.play();
+    // Ưu tiên 1: Tải não bộ (YAML + ONNX)
     await loadModel();
-    detectFrame(); 
+    
+    // Ưu tiên 2: Xin quyền Camera
+    await setupCamera();
+    
+    // Ưu tiên 3: Nếu được cấp quyền, bật Cam và Quét
+    if (video.srcObject) {
+        await video.play().catch(e => console.error("Lỗi bật camera:", e));
+        detectFrame(); 
+    }
 }
 
 main();
