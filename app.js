@@ -4,7 +4,7 @@ const ctx = canvas.getContext('2d');
 const statusText = document.getElementById('status');
 
 // 4 nhãn chuẩn theo biểu đồ của bro
-const CLASSES = ["Hazardous waste", "Kitchen waste", "Other waste", "Recyclable waste"];
+const CLASSES = ["Hazardous waste", "Organic waste", "Inorganic waste", "Recyclable waste"];
 
 let session; 
 let isDetecting = false; // Cờ khóa an toàn chống sập ngầm
