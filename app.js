@@ -92,7 +92,7 @@ function iou(box1, box2) {
 async function detectFrame() {
     if (!session) return;
 
-    // 👉 TỐI ƯU 1: Ép chạy AI ở mức 20 FPS thay vì Max FPS để giảm tải CPU
+    // Hãm phanh FPS
     const now = Date.now();
     if (now - lastFrameTime < 50) { 
         requestAnimationFrame(detectFrame);
@@ -100,7 +100,7 @@ async function detectFrame() {
     }
     lastFrameTime = now;
     
-    // Nếu frame trước chưa xử lý xong, bỏ qua frame này (Tránh thắt cổ chai)
+    // Nếu frame trước chưa xử lý xong, bỏ qua frame này
     if (isDetecting) {
         requestAnimationFrame(detectFrame);
         return;
@@ -112,7 +112,7 @@ async function detectFrame() {
         const feeds = { [session.inputNames[0]]: inputTensor };
         const results = await session.run(feeds);
         
-        // 👉 TỐI ƯU 2: Dọn sạch RAM ngay lập tức
+        // Dọn sạch RAM tensor
         inputTensor.dispose(); 
         
         const output = results[session.outputNames[0]].data; 
@@ -160,18 +160,53 @@ async function detectFrame() {
             const scaleY = canvas.height / 640;
             let boxColor = PALETTE[box.classId % PALETTE.length];
 
+            // 1. Vẽ BBox trước
             ctx.strokeStyle = boxColor; 
             ctx.lineWidth = 4; 
-            ctx.strokeRect(box.x1 * scaleX, box.y1 * scaleY, (box.x2 - box.x1) * scaleX, (box.y2 - box.y1) * scaleY);
+            const scaledX = box.x1 * scaleX;
+            const scaledY = box.y1 * scaleY;
+            ctx.strokeRect(scaledX, scaledY, (box.x2 - box.x1) * scaleX, (box.y2 - box.y1) * scaleY);
 
-            ctx.fillStyle = boxColor;
-            const labelText = `${CLASSES[box.classId]} ${(box.prob * 100).toFixed(0)}%`;
+            // 2. Cấu hình nhãn (Label)
             ctx.font = "bold 20px Arial"; 
+            const labelText = `${CLASSES[box.classId]} ${(box.prob * 100).toFixed(0)}%`;
             const textWidth = ctx.measureText(labelText).width;
-            ctx.fillRect(box.x1 * scaleX, box.y1 * scaleY - 30, textWidth + 16, 30);
+            const labelRectHeight = 30; // Chiều cao mặc định của nhãn
+            const labelRectWidth = textWidth + 16; // Chiều rộng mặc định của nhãn (+16 padding)
+            const labelPadX = 8; // Padding ngang trong nhãn
+
+            // --- 👉 THUẬT TOÁN CHỐNG TRÀN NHÃN (Bounds Checking) ---
             
+            // Khởi tạo tọa độ nhãn mặc định (nằm trên hộp BBox)
+            let finalLabelX = scaledX;
+            let finalLabelY = scaledY - labelRectHeight;
+
+            // Kiểm tra tràn biên trên: Nếu nhãn bị đẩy ra ngoài mép trên Canvas
+            if (finalLabelY < 0) {
+                // Nhảy nhãn vào nằm BÊN TRONG hộp, sát mép trên
+                finalLabelY = scaledY; 
+            }
+            
+            // Kiểm tra tràn biên phải: Nếu nhãn bị đẩy ra ngoài mép phải Canvas
+            if (finalLabelX + labelRectWidth > canvas.width) {
+                // Căn lề phải của nhãn khớp với lề phải của Canvas
+                finalLabelX = canvas.width - labelRectWidth;
+            }
+            // (Thêm an toàn) Kiểm tra tràn biên trái
+            if (finalLabelX < 0) {
+                finalLabelX = 0;
+            }
+
+            // 3. Vẽ nền nhãn khớp với tọa độ đã tối ưu
+            ctx.fillStyle = boxColor;
+            ctx.fillRect(finalLabelX, finalLabelY, labelRectWidth, labelRectHeight);
+            
+            // 4. Vẽ chữ lên nhãn
             ctx.fillStyle = "white";
-            ctx.fillText(labelText, box.x1 * scaleX + 8, box.y1 * scaleY - 8);
+            // Tọa độ chữ lùi vào padding ngang, và căn theo baseline dọc của nhãn (cách rectTop ~22px)
+            const finalTextX = finalLabelX + labelPadX;
+            const finalTextY = finalLabelY + 22; 
+            ctx.fillText(labelText, finalTextX, finalTextY);
         });
 
     } catch (e) {
