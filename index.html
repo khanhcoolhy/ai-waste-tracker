@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>AI Waste Tracker 🌍</title>
     
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
@@ -20,20 +20,21 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 20px;
+            padding: 15px; /* Giảm padding cho mobile */
         }
-        .header { text-align: center; margin-bottom: 15px; margin-top: 10px; }
-        .header h1 { font-size: 2.2rem; font-weight: 900; color: #1b5e20; text-shadow: 2px 2px 4px rgba(0,0,0,0.1); margin-bottom: 5px; }
-        .header p { font-size: 1.1rem; color: #388e3c; font-weight: 700; }
         
-        #status-container { margin-bottom: 15px; }
+        .header { text-align: center; margin-bottom: 15px; margin-top: 5px; }
+        .header h1 { font-size: 2rem; font-weight: 900; color: #1b5e20; text-shadow: 2px 2px 4px rgba(0,0,0,0.1); margin-bottom: 5px; }
+        .header p { font-size: 1rem; color: #388e3c; font-weight: 700; }
+        
+        #status-container { margin-bottom: 15px; width: 100%; text-align: center; }
         #status {
-            display: inline-block; padding: 8px 25px; border-radius: 50px;
-            font-weight: bold; background-color: #ffb300; color: #fff;
+            display: inline-block; padding: 10px 25px; border-radius: 50px;
+            font-weight: bold; font-size: 0.95rem; background-color: #ffb300; color: #fff;
             box-shadow: 0 4px 10px rgba(0,0,0,0.15); transition: all 0.3s ease;
         }
 
-        /* --- BẢNG ĐIỀU KHIỂN DẠNG TAB --- */
+        /* --- BẢNG ĐIỀU KHIỂN --- */
         .controls-wrapper {
             background: rgba(255, 255, 255, 0.85);
             padding: 15px;
@@ -41,7 +42,7 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.05);
             backdrop-filter: blur(5px);
             width: 100%;
-            max-width: 500px;
+            max-width: 700px; /* 👉 Đã mở rộng không gian lên 700px */
             margin-bottom: 20px;
         }
 
@@ -51,7 +52,8 @@
         }
 
         .tab-btn {
-            flex: 1; padding: 10px 5px; border: none; background: transparent;
+            flex: 1; padding: 12px 5px; /* Tăng chiều cao để dễ bấm trên đt */
+            border: none; background: transparent;
             color: #555; font-weight: bold; font-size: 0.95rem;
             border-radius: 10px; cursor: pointer; transition: all 0.3s ease;
         }
@@ -66,30 +68,41 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
         .btn {
-            padding: 10px 20px; border: none; border-radius: 12px;
+            padding: 12px 20px; border: none; border-radius: 12px; /* Nút bấm to hơn */
             font-weight: bold; font-size: 1rem; cursor: pointer; color: white;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: 0.2s;
+            width: 100%;
         }
-        .btn:hover { transform: translateY(-2px); }
-        .btn-upload { background: #9C27B0; width: 100%; }
-        .btn-url { background: #FF9800; white-space: nowrap; }
+        .btn:active { transform: translateY(2px); } /* Hiệu ứng bấm thực tế hơn hover trên đt */
+        .btn-upload { background: #9C27B0; }
+        .btn-url { background: #FF9800; white-space: nowrap; width: auto; }
         
-        .input-group { display: flex; gap: 8px; width: 100%; }
+        .input-group { display: flex; gap: 8px; width: 100%; flex-wrap: wrap; }
         .input-url {
-            flex: 1; padding: 10px; border-radius: 12px;
+            flex: 1; padding: 12px; border-radius: 12px; min-width: 200px;
             border: 2px solid #ccc; outline: none; font-family: inherit;
+            font-size: 16px; /* Bắt buộc 16px để iOS không tự zoom màn hình */
         }
         .input-url:focus { border-color: #4CAF50; }
 
-        /* --- KHUNG CAMERA/ẢNH --- */
+        /* --- KHUNG CAMERA CHÀ BÁ --- */
         .camera-wrapper {
-            position: relative; width: 100%; max-width: 500px; aspect-ratio: 1 / 1;
+            position: relative; 
+            width: 100%; 
+            max-width: 700px; /* 👉 To tối đa 700px, nhưng vẫn auto bóp lại nếu màn đt bé */
+            aspect-ratio: 1 / 1; 
             background-color: #000; border-radius: 24px; overflow: hidden;
-            box-shadow: 0 15px 35px rgba(46, 125, 50, 0.4); border: 6px solid #ffffff;
+            box-shadow: 0 15px 35px rgba(46, 125, 50, 0.4); border: 4px solid #ffffff;
         }
-        /* Phải dùng object-fit: fill để tọa độ BBox khớp tuyệt đối */
+        
         video, canvas, img {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; 
+        }
+
+        /* Tinh chỉnh cho màn hình siêu nhỏ */
+        @media (max-width: 400px) {
+            .header h1 { font-size: 1.6rem; }
+            .btn-url { width: 100%; } /* Đẩy nút Quét Link xuống hàng dưới cho dễ bấm */
         }
     </style>
 </head>
@@ -112,13 +125,13 @@
         </div>
 
         <div class="tab-content active" id="tab-cam">
-            <p style="color: #388e3c; font-weight: bold;" id="cam-instruction">Hệ thống đang tự động phân tích qua Camera...</p>
+            <p style="color: #388e3c; font-weight: bold; font-size: 0.95rem;" id="cam-instruction">Đang kích hoạt Camera...</p>
         </div>
 
         <div class="tab-content" id="tab-upload">
             <input type="file" id="upload-file" accept="image/*" style="display: none;">
             <button class="btn btn-upload" onclick="document.getElementById('upload-file').click()">
-                Chọn ảnh từ thiết bị của bạn
+                Bấm vào đây để chọn ảnh
             </button>
         </div>
 
