@@ -118,7 +118,7 @@ async function detectFrame() {
         const output = results[session.outputNames[0]].data; 
         const boxes = [];
         const numClasses = CLASSES.length;
-        const CONF_THRESHOLD = 0.3; 
+        const CONF_THRESHOLD = 0.6; 
 
         for (let index = 0; index < 8400; index++) {
             let maxClassProb = 0;
